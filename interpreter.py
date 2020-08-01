@@ -1,3 +1,4 @@
+import time
 from lexing import TokenType
 from parsing import Expr, ExprType, StmtType
 
@@ -70,13 +71,60 @@ def get_func(expr):
     if expr.expr_type == ExprType.GROUPING:
         return _id
 
+# foreign function that tells time
+class Clock(object):
+
+    def arity(self):
+        return 0
+
+    def __call__(self, interpreter, args):
+        return time.time()
+
+    def __str__(self):
+        return '<native fn>'
+
+class Return(Exception):
+
+    def __init__(self, value):
+        self.value = value
+
+class LoxFunction(object):
+
+    def __init__(self, decl):
+        self.decl = decl
+
+    def __call__(self, interpreter, args):
+        env = Environment(interpreter._env)
+        for name, arg in zip(self.decl.params, args):
+            env.define(name.lexeme, arg)
+        try:
+            interpreter.exec_block(self.decl.body, env)
+        except Return as r:
+            return r.value
+
+    def arity(self):
+        return len(self.decl.params)
+
+    def __str__(self):
+        return '<fn {} >'.format(self.decl.name.lexeme)
+
 
 class Interpreter(object):
 
     def __init__(self):
         self._env = Environment()
+        self._env.define('clock', Clock())
 
     def interpret_expr(self, expr):
+        if expr.expr_type == ExprType.CALL:
+            operands = list(map(self.interpret_expr, expr.operands))
+            func = operands[0]
+            args = operands[1:]
+            if func.arity() != len(args):
+                raise InterpreterError(
+                        'Expected {} args, got {}'.format(
+                            func.arity(), args))
+            return func(self, args)
         if expr.expr_type == ExprType.LITERAL:
             return expr.op.literal
         if expr.expr_type == ExprType.VARIABLE:
@@ -100,7 +148,15 @@ class Interpreter(object):
         return func(operands)
 
     def interpret_stmt(self, stmt):
-        if stmt.type_ == StmtType.IF:
+        if stmt.type_ == StmtType.RETURN:
+            value = None
+            if stmt.expr is not None:
+                value = self.interpret_expr(stmt.expr)
+            raise Return(value)
+        if stmt.type_ == StmtType.FUNCTION:
+            func = LoxFunction(stmt)
+            self._env.define(stmt.name.lexeme, func)
+        elif stmt.type_ == StmtType.IF:
             if self.interpret_expr(stmt.condition):
                 self.interpret_stmt(stmt.then_br)
             elif stmt.else_br is not None:

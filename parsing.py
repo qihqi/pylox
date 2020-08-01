@@ -14,6 +14,7 @@ class ExprType(enum.Enum):
     VARIABLE = 4
     ASSIGN = 5
     LOGICAL= 6
+    CALL = 7
 
 
 class Expr:
@@ -24,6 +25,7 @@ class Expr:
       "Literal  : Object value",
       "Unary    : Token operator, Expr right"
       "Assign   : Token operator(assignment), Token lhs, Expr rhs
+      "CAll : Token operator(paren), Expr func, Expr args ...
     """
 
     def __init__(self, op, operands):
@@ -32,6 +34,8 @@ class Expr:
 
     @property
     def expr_type(self):
+        if self.op and self.op.type_ == TokenType.RIGHT_PAREN:
+            return ExprType.CALL
         if len(self.operands) == 2:
             if self.op and self.op.type_ == TokenType.EQUAL:
                 return ExprType.ASSIGN
@@ -81,6 +85,8 @@ class StmtType(enum.Enum):
     BLOCK = 3
     IF = 4
     WHILE = 5
+    FUNCTION = 6
+    RETURN = 7
 
 
 class Stmt(object):
@@ -126,6 +132,29 @@ class WhileStmt(Stmt):
         return StmtType.WHILE
 
 
+class FunctionStmt(Stmt):
+
+    def __init__(self, name, params, body):
+        self.name = name
+        self.params = params
+        self.body = body
+
+    @property
+    def type_(self):
+        return StmtType.FUNCTION
+
+
+class ReturnStmt(Stmt):
+
+    def __init__(self, keyword, expr):
+        self.keyword = keyword
+        self.expr = expr
+
+    @property
+    def type_(self):
+        return StmtType.RETURN
+
+
 class Parser:
 
     def __init__(self, tokens):
@@ -141,12 +170,34 @@ class Parser:
     def declaration(self):
         "declaration -> var decl | statement"
         try:
+            if self.match(TokenType.FUN):
+                return self.function('function')
             if self.match(TokenType.VAR):
                 return self.var_decl()
             return self.statement()
         except ParseError:
             self.synchronize()
             return None
+
+    def function(self, kind):
+        name = self.consume(TokenType.IDENTIFIER,
+                'Expect {} name.'.format(kind))
+        self.consume(TokenType.LEFT_PAREN, '')
+        parameters = []
+        if not self.check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(parameters) > 256:
+                    error.error(self.peek(),
+                            'cannot have more than255 params.')
+                parameters.append(self.consume(TokenType.IDENTIFIER,
+                    'expect parameter name'))
+                if not self.match(TokenType.COMMA):
+                    break
+        self.consume(TokenType.RIGHT_PAREN)
+        self.consume(TokenType.LEFT_BRACE,
+                     'Expect {{ before {} body'.format(kind))
+        body = self.block()
+        return FunctionStmt(name, parameters, body)
 
     def var_decl(self):
         name = self.consume(TokenType.IDENTIFIER,
@@ -159,6 +210,8 @@ class Parser:
         return Stmt(initializer, StmtType.VARIABLE, name)
 
     def statement(self):
+        if self.match(TokenType.RETURN):
+            return self.return_statement()
         if self.match(TokenType.FOR):
             return self.for_statement()
         if self.match(TokenType.IF):
@@ -170,6 +223,14 @@ class Parser:
         if self.match(TokenType.LEFT_BRACE):
             return Block(self.block())
         return self.expression_statement();
+
+    def return_statement(self):
+        keyword = self.previous()
+        expr = None
+        if not self.check(TokenType.SEMICOLON):
+            expr = self.expression()
+        self.consume(TokenType.SEMICOLON, 'Expect ; after return')
+        return ReturnStmt(keyword, expr)
 
     def for_statement(self):
         self.consume(TokenType.LEFT_PAREN, 'Expect "(" after "while"')
@@ -188,7 +249,8 @@ class Parser:
 
         increment = None
         if not self.check(TokenType.RIGHT_PAREN):
-            increment = self.expression()
+            increment = Stmt(self.expression(), StmtType.EXPRESSION)
+
         self.consume(TokenType.RIGHT_PAREN, 'Expect ")" after if condition')
 
         body = self.statement()
@@ -197,7 +259,7 @@ class Parser:
         if condition is None:
             condition = Expr.literal(
                     Token(TokenType.TRUE, 'true', True, 0))
-        body = WhileStmt(conditon, body)
+        body = WhileStmt(condition, body)
         if initializer is not None:
             body = Block([initializer, body])
         return body
@@ -265,7 +327,7 @@ class Parser:
     def at_end(self):
         return self.peek().type_ == TokenType.EOF
 
-    def consume(self, token_type, message):
+    def consume(self, token_type, message=''):
         if self.check(token_type):
             return self.advance()
         error.error(self.peek().line, message)
@@ -363,7 +425,29 @@ class Parser:
             operator = self.previous()
             right = self.unary()
             return Expr.unary(operator, right)
-        return self.primary()
+        return self.call()
+
+    def call(self):
+        expr = self.primary()
+        while True:
+            if self.match(TokenType.LEFT_PAREN):
+                expr = self.finish_call(expr)
+            else:
+                break
+        return expr
+
+    def finish_call(self, callee):
+        args = [callee]
+        if not self.check(TokenType.RIGHT_PAREN):
+            args.append(self.expression())
+            while self.match(TokenType.COMMA):
+                if len(args) >= 256:
+                    error.error(self.peek(),
+                        'Cannot have more than 255 args')
+                args.append(self.expression())
+        paren = self.consume(TokenType.RIGHT_PAREN,
+            'Expect ) after arguments')
+        return Expr(paren, args)
 
     def primary(self):
         if self.match(TokenType.FALSE):

@@ -90,11 +90,12 @@ class Return(Exception):
 
 class LoxFunction(object):
 
-    def __init__(self, decl):
+    def __init__(self, decl, closure):
         self.decl = decl
+        self.closure = closure
 
     def __call__(self, interpreter, args):
-        env = Environment(interpreter._env)
+        env = Environment(self.closure)
         for name, arg in zip(self.decl.params, args):
             env.define(name.lexeme, arg)
         try:
@@ -153,8 +154,8 @@ class Interpreter(object):
             if stmt.expr is not None:
                 value = self.interpret_expr(stmt.expr)
             raise Return(value)
-        if stmt.type_ == StmtType.FUNCTION:
-            func = LoxFunction(stmt)
+        elif stmt.type_ == StmtType.FUNCTION:
+            func = LoxFunction(stmt, self._env)
             self._env.define(stmt.name.lexeme, func)
         elif stmt.type_ == StmtType.IF:
             if self.interpret_expr(stmt.condition):

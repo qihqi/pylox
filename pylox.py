@@ -5,6 +5,7 @@ from lexing import TokenType, Token, Scanner
 from parsing import Expr, Parser
 import error
 import interpreter
+import resolver
 
 interp = interpreter.Interpreter()
 
@@ -17,6 +18,10 @@ def run(code):
         return
     parser = Parser(tokens)
     stmts = parser.parse()
+    if error.had_error:
+        return
+    res = resolver.Resolver(interp)
+    res.resolve(stmts)
     if error.had_error:
         return
     interp.interpret(stmts)

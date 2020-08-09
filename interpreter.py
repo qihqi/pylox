@@ -113,8 +113,10 @@ class LoxFunction(object):
 class Interpreter(object):
 
     def __init__(self):
-        self._env = Environment()
+        self._globals = Environment()
+        self._env = self._globals
         self._env.define('clock', Clock())
+        self._locals = {}
 
     def interpret_expr(self, expr):
         if expr.expr_type == ExprType.CALL:
@@ -129,7 +131,10 @@ class Interpreter(object):
         if expr.expr_type == ExprType.LITERAL:
             return expr.op.literal
         if expr.expr_type == ExprType.VARIABLE:
-            return self._env.get(expr.op)
+            dist = self._locals.get(expr)
+            if dist is not None:
+                return self._env.get_at(dist, expr.op)
+            return self._globals.get(expr.op)
         if expr.expr_type == ExprType.ASSIGN:
             tok = expr.operands[0]
             val = self.interpret_expr(expr.operands[1])
@@ -190,6 +195,10 @@ class Interpreter(object):
         for s in stmts:
             self.interpret_stmt(s)
 
+    def resolve(self, expr, depth):
+        self._locals[expr] = depth
+
+
 
 class Environment(object):
 
@@ -208,6 +217,11 @@ class Environment(object):
         raise InterpreterError('Undefined variable: {}'.format(
             k.lexeme))
 
+    def get_at(self, dist, key):
+        if dist == 0:
+            return self.values[key.lexeme]
+        return self.enclosing.get_at(dist - 1, key)
+
     def assign(self, k, v):
         if k.lexeme in self.values:
             self.values[k.lexeme] = v
@@ -216,5 +230,10 @@ class Environment(object):
             return self.enclosing.assign(k, v)
 
         raise InterpreterError('Undefined variable: ', k.lexeme)
+
+    def assign_at(self, dist, k, v):
+        if dist == 0:
+            self.values[k.lexeme] = v
+        self.enclosing(dist - 1, k, v)
 
 

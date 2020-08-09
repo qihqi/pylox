@@ -10,3 +10,20 @@ fun sayHi(first, last) {
 sayHi("Dear", "Reader");
 print sayHi;
 count(3);
+
+fun closured() {
+  var i = 0;
+  fun inner() {
+    print i;
+    i = i + 1;
+  }
+  return inner;
+}
+
+var f = closured();
+f();
+f();
+f();
+f();
+f();
+

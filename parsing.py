@@ -56,10 +56,14 @@ class Expr:
     def __str__(self):
         if self.expr_type == ExprType.LITERAL:
             return str(self.op.literal)
+        if self.expr_type == ExprType.VARIABLE:
+            return str(self.op)
         opstr = 'group' if self.op is None else str(self.op.type_)
         return '({} {})'.format(
                 opstr,
                 ' '.join(map(str, self.operands)))
+
+    __repr__ = __str__
 
     @classmethod
     def binary(cls, left, op, right):

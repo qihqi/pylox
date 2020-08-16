@@ -88,11 +88,60 @@ class Return(Exception):
     def __init__(self, value):
         self.value = value
 
+class LoxInstance(object):
+
+    def __init__(self, klass):
+        self.klass = klass
+        self.fields = {}
+
+    def __str__(self):
+        return self.klass.name + ' instance'
+
+    def get(self, name):
+        if name.lexeme in self.fields:
+            return self.fields[name.lexeme]
+        method = self.klass.find_method(name.lexeme)
+        if method is not None:
+            return method.bind(self);
+        raise InterpreterError(' Undefined property {} on {}'.format(
+            name.lexeme, self))
+
+    def set_(self, name, value):
+        self.fields[name.lexeme] = value
+
+
+class LoxClass(object):
+
+    def __init__(self, name, methods):
+        self.name = name
+        self.methods = methods
+
+    def __str__(self):
+        return self.name
+
+    def __call__(self, interpreter, args):
+        instance = LoxInstance(self)
+        init = self.find_method('init')
+        init.bind(instance)(interpreter, args)
+        return instance
+
+    def find_method(self, name):
+        return self.methods.get(name)
+
+    def arity(self):
+        init = self.find_method('init')
+        if init is None:
+            return 0
+        return init.arity()
+
+    __repr__ = __str__
+
 class LoxFunction(object):
 
-    def __init__(self, decl, closure):
+    def __init__(self, decl, closure, is_init):
         self.decl = decl
         self.closure = closure
+        self.is_init = is_init
 
     def __call__(self, interpreter, args):
         env = Environment(self.closure)
@@ -101,13 +150,23 @@ class LoxFunction(object):
         try:
             interpreter.exec_block(self.decl.body, env)
         except Return as r:
+            if self.is_init:
+                return self.closure.get_at(0, 'this')
             return r.value
+
+        if self.is_init:
+            return self.closure.get_at(0, 'this')
 
     def arity(self):
         return len(self.decl.params)
 
     def __str__(self):
         return '<fn {} >'.format(self.decl.name.lexeme)
+
+    def bind(self, instance):
+        env = Environment(self.closure)
+        env.define('this', instance)
+        return LoxFunction(self.decl, env, self.is_init)
 
 
 class Interpreter(object):
@@ -119,7 +178,19 @@ class Interpreter(object):
         self._locals = {}
 
     def interpret_expr(self, expr):
-        if expr.expr_type == ExprType.CALL:
+        if expr.expr_type == ExprType.SET:
+            obj = self.interpret_expr(expr.obj)
+            if not isinstance(obj, LoxInstance):
+                raise InterpreterError('Only instances have properties')
+            value = self.interpret_expr(expr.value)
+            obj.set_(expr.name, value)
+            return value
+        elif expr.expr_type == ExprType.GET:
+            obj = self.interpret_expr(expr.obj)
+            if not isinstance(obj, LoxInstance):
+                raise InterpreterError('Only instances have properties')
+            return obj.get(expr.name)
+        elif expr.expr_type == ExprType.CALL:
             operands = list(map(self.interpret_expr, expr.operands))
             func = operands[0]
             args = operands[1:]
@@ -130,7 +201,8 @@ class Interpreter(object):
             return func(self, args)
         if expr.expr_type == ExprType.LITERAL:
             return expr.op.literal
-        if expr.expr_type == ExprType.VARIABLE:
+        if (expr.expr_type == ExprType.VARIABLE or
+            expr.expr_type == ExprType.THIS):
             dist = self._locals.get(expr)
             if dist is not None:
                 return self._env.get_at(dist, expr.op)
@@ -154,13 +226,20 @@ class Interpreter(object):
         return func(operands)
 
     def interpret_stmt(self, stmt):
-        if stmt.type_ == StmtType.RETURN:
+        if stmt.type_ == StmtType.CLASS:
+            self._env.define(stmt.name.lexeme, None)
+            methods = {m.name.lexeme: LoxFunction(m, self._env, True)
+                    for m in stmt.methods}
+            klass = LoxClass(stmt.name.lexeme, methods)
+            self._env.assign(stmt.name, klass)
+
+        elif stmt.type_ == StmtType.RETURN:
             value = None
             if stmt.expr is not None:
                 value = self.interpret_expr(stmt.expr)
             raise Return(value)
         elif stmt.type_ == StmtType.FUNCTION:
-            func = LoxFunction(stmt, self._env)
+            func = LoxFunction(stmt, self._env, False)
             self._env.define(stmt.name.lexeme, func)
         elif stmt.type_ == StmtType.IF:
             if self.interpret_expr(stmt.condition):

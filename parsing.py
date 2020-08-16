@@ -15,6 +15,9 @@ class ExprType(enum.Enum):
     ASSIGN = 5
     LOGICAL= 6
     CALL = 7
+    GET = 8
+    SET = 9
+    THIS = 10
 
 
 class Expr:
@@ -50,6 +53,8 @@ class Expr:
         if len(self.operands) == 0:
             if self.op.type_ == TokenType.IDENTIFIER:
                 return ExprType.VARIABLE
+            if self.op.type_ == TokenType.THIS:
+                return ExprType.THIS
             return ExprType.LITERAL
         raise AssertionError('invalid', self.op, self.operands)
 
@@ -81,6 +86,28 @@ class Expr:
     def assign(cls, token_assign, token_var, expr):
         return cls(token_assign, [token_var, expr])
 
+class GetExpr(Expr):
+
+    def __init__(self, obj, name):
+        self.obj = obj
+        self.name = name
+
+    @property
+    def expr_type(self):
+        return ExprType.GET
+
+
+class SetExpr(Expr):
+
+    def __init__(self, obj, name, value):
+        self.obj = obj
+        self.name = name
+        self.value = value
+
+    @property
+    def expr_type(self):
+        return ExprType.SET
+
 
 class StmtType(enum.Enum):
     PRINT = 0
@@ -91,6 +118,7 @@ class StmtType(enum.Enum):
     WHILE = 5
     FUNCTION = 6
     RETURN = 7
+    CLASS = 8
 
 
 class Stmt(object):
@@ -159,6 +187,17 @@ class ReturnStmt(Stmt):
         return StmtType.RETURN
 
 
+class ClassStmt(Stmt):
+
+    def __init__(self, name, methods):
+        self.name = name
+        self.methods = methods
+
+    @property
+    def type_(self):
+        return StmtType.CLASS
+
+
 class Parser:
 
     def __init__(self, tokens):
@@ -174,6 +213,8 @@ class Parser:
     def declaration(self):
         "declaration -> var decl | statement"
         try:
+            if self.match(TokenType.CLASS):
+                return self.class_declaration()
             if self.match(TokenType.FUN):
                 return self.function('function')
             if self.match(TokenType.VAR):
@@ -182,6 +223,15 @@ class Parser:
         except ParseError:
             self.synchronize()
             return None
+
+    def class_declaration(self):
+        name = self.consume(TokenType.IDENTIFIER, 'Expect class name')
+        self.consume(TokenType.LEFT_BRACE, 'Expect { after class name')
+        methods = []
+        while not self.check(TokenType.RIGHT_BRACE) and not self.at_end():
+            methods.append(self.function('method'))
+        self.consume(TokenType.RIGHT_BRACE, 'Expect } after class name')
+        return ClassStmt(name, methods)
 
     def function(self, kind):
         name = self.consume(TokenType.IDENTIFIER,
@@ -367,7 +417,10 @@ class Parser:
 
             if expr.expr_type == ExprType.VARIABLE:
                 return Expr.assign(equals, expr.op, value)
+            elif expr.expr_type == ExprType.GET:
+                return SetExpr(expr.obj, expr.name, value)
 
+            print(expr)
             error.error(equals.line, 'Invalid assignment target.')
 
         return expr
@@ -436,6 +489,10 @@ class Parser:
         while True:
             if self.match(TokenType.LEFT_PAREN):
                 expr = self.finish_call(expr)
+            elif self.match(TokenType.DOT):
+                name = self.consume(TokenType.IDENTIFIER,
+                        'Expect property name after .')
+                expr = GetExpr(expr, name)
             else:
                 break
         return expr
@@ -461,6 +518,8 @@ class Parser:
         if self.match(TokenType.NIL):
             return Expr.literal(self.previous())
         if self.match(TokenType.NUMBER, TokenType.STRING):
+            return Expr.literal(self.previous())
+        if self.match(TokenType.THIS):
             return Expr.literal(self.previous())
         if self.match(TokenType.IDENTIFIER):
             return Expr.literal(self.previous())

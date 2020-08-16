@@ -1,0 +1,16 @@
+class Bagel {
+  say() {
+    print this.a;
+  }
+}
+var b = Bagel();
+b.a = 4;
+b.say();
+
+class Bacon {
+  eat() {
+    print "Crunch crunch crunch!";
+  }
+}
+
+Bacon().eat(); // Prints "Crunch crunch crunch!".

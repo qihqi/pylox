@@ -18,6 +18,7 @@ class ExprType(enum.Enum):
     GET = 8
     SET = 9
     THIS = 10
+    SUPER = 11
 
 
 class Expr:
@@ -109,6 +110,18 @@ class SetExpr(Expr):
         return ExprType.SET
 
 
+class SuperExpr(Expr):
+
+    def __init__(self, keyword, method):
+        self.keyword = keyword
+        self.method = method
+
+    @property
+    def expr_type(self):
+        return ExprType.SUPER
+
+
+
 class StmtType(enum.Enum):
     PRINT = 0
     EXPRESSION = 1
@@ -189,9 +202,10 @@ class ReturnStmt(Stmt):
 
 class ClassStmt(Stmt):
 
-    def __init__(self, name, methods):
+    def __init__(self, name, methods, superclass=None):
         self.name = name
         self.methods = methods
+        self.superclass = superclass
 
     @property
     def type_(self):
@@ -226,12 +240,16 @@ class Parser:
 
     def class_declaration(self):
         name = self.consume(TokenType.IDENTIFIER, 'Expect class name')
+        superclass = None
+        if self.match(TokenType.LESS):
+            self.consume(TokenType.IDENTIFIER, 'Expect superclass name')
+            superclass = Expr.literal(self.previous())
         self.consume(TokenType.LEFT_BRACE, 'Expect { after class name')
         methods = []
         while not self.check(TokenType.RIGHT_BRACE) and not self.at_end():
             methods.append(self.function('method'))
         self.consume(TokenType.RIGHT_BRACE, 'Expect } after class name')
-        return ClassStmt(name, methods)
+        return ClassStmt(name, methods, superclass)
 
     def function(self, kind):
         name = self.consume(TokenType.IDENTIFIER,
@@ -511,6 +529,12 @@ class Parser:
         return Expr(paren, args)
 
     def primary(self):
+        if self.match(TokenType.SUPER):
+            keyword = self.previous()
+            self.consume(TokenType.DOT, 'Expect . after super')
+            method = self.consume(TokenType.IDENTIFIER,
+                    'Expect superclass method')
+            return SuperExpr(keyword, method)
         if self.match(TokenType.FALSE):
             return Expr.literal(self.previous())
         if self.match(TokenType.TRUE):

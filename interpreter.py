@@ -112,9 +112,10 @@ class LoxInstance(object):
 
 class LoxClass(object):
 
-    def __init__(self, name, methods):
+    def __init__(self, name, methods, superclass=None):
         self.name = name
         self.methods = methods
+        self.superclass = superclass
 
     def __str__(self):
         return self.name
@@ -122,11 +123,15 @@ class LoxClass(object):
     def __call__(self, interpreter, args):
         instance = LoxInstance(self)
         init = self.find_method('init')
-        init.bind(instance)(interpreter, args)
+        if init:
+            init.bind(instance)(interpreter, args)
         return instance
 
     def find_method(self, name):
-        return self.methods.get(name)
+        if name in self.methods:
+            return self.methods.get(name)
+        if self.superclass is not None:
+            return self.superclass.find_method(name)
 
     def arity(self):
         init = self.find_method('init')
@@ -178,7 +183,16 @@ class Interpreter(object):
         self._locals = {}
 
     def interpret_expr(self, expr):
-        if expr.expr_type == ExprType.SET:
+        if expr.expr_type == ExprType.SUPER:
+            dist = self._locals.get(expr)
+            superclass = self._env.get_at(dist, 'super')
+            obj = self._env.get_at(dist - 1, 'this')
+            method = superclass.find_method(expr.method.lexeme)
+            if method is None:
+                raise InterpreterError('Undefined property {}.'.format(
+                    expr.method.lexeme))
+            return method.bind(obj)
+        elif expr.expr_type == ExprType.SET:
             obj = self.interpret_expr(expr.obj)
             if not isinstance(obj, LoxInstance):
                 raise InterpreterError('Only instances have properties')
@@ -227,10 +241,21 @@ class Interpreter(object):
 
     def interpret_stmt(self, stmt):
         if stmt.type_ == StmtType.CLASS:
-            self._env.define(stmt.name.lexeme, None)
-            methods = {m.name.lexeme: LoxFunction(m, self._env, True)
+            superclass = None
+            if stmt.superclass:
+                superclass = self.interpret_expr(stmt.superclass)
+                if not isinstance(superclass, LoxClass):
+                    raise InterpreterError('Superclass must be a class')
+                self._env = Environment(self._env)
+                self._env.define('super', superclass)
+
+            methods = {
+                m.name.lexeme: LoxFunction(m, self._env, m.name.lexeme == 'init')
                     for m in stmt.methods}
-            klass = LoxClass(stmt.name.lexeme, methods)
+            if superclass:
+                self._env = self._env.enclosing
+            self._env.define(stmt.name.lexeme, None)
+            klass = LoxClass(stmt.name.lexeme, methods, superclass)
             self._env.assign(stmt.name, klass)
 
         elif stmt.type_ == StmtType.RETURN:
@@ -298,6 +323,8 @@ class Environment(object):
 
     def get_at(self, dist, key):
         if dist == 0:
+            if isinstance(key, str):
+                return self.values[key]
             return self.values[key.lexeme]
         return self.enclosing.get_at(dist - 1, key)
 

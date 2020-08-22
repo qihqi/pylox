@@ -14,6 +14,7 @@ class FunctionType(enum.Enum):
 class ClassType(enum.Enum):
     NONE = 0
     CLASS = 1
+    SUBCLASS = 2
 
 
 class Resolver(object):
@@ -40,11 +41,17 @@ class Resolver(object):
         self._scopes.pop()
 
     def resolve_expr(self, expr):
-        if expr.expr_type == ExprType.THIS:
+        if expr.expr_type == ExprType.SUPER:
+            if self._current_class == ClassType.NONE:
+                error.error('Cannot use super outside of class')
+            if self._current_class == ClassType.SUBCLASS:
+                error.error('Cannot use super in class with no superclass')
+            self.resolve_local(expr, expr.keyword)
+        elif expr.expr_type == ExprType.THIS:
             if self._current_class == ClassType.NONE:
                 error.error(expr.op, 'cannot use this outside of a class')
             self.resolve_local(expr, expr.op)
-        if expr.expr_type == ExprType.SET:
+        elif expr.expr_type == ExprType.SET:
             self.resolve_expr(expr.value)
             self.resolve_expr(expr.obj)
         elif expr.expr_type == ExprType.GET:
@@ -102,6 +109,16 @@ class Resolver(object):
             self._current_class = ClassType.CLASS
             self.declare(stmt.name)
             self.define(stmt.name)
+            if stmt.superclass:
+                if stmt.name.lexeme == stmt.superclass.op.lexeme:
+                    error.error(
+                            stmt.superclass.op,
+                            'A class cannot inherit from itself.')
+                self._current_class = ClassType.SUBCLASS
+                self.resolve_expr(stmt.superclass)
+                self.begin_scope()
+                self._scopes[0]['super'] = True
+
             self.begin_scope()
             self._scopes[0]['this'] = True
             for method in stmt.methods:
@@ -110,6 +127,8 @@ class Resolver(object):
                     decl = FunctionType.INITIALIZER
                 self.resolve_function(method, decl)
             self.end_scope()
+            if stmt.superclass:
+                self.end_scope()
             self._current_class = enclosing_class
         elif stmt.type_ == StmtType.FUNCTION:
             self.declare(stmt.name)

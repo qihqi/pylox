@@ -31,6 +31,7 @@ static Token errorToken(const char* message) {
     token.start = message;
     token.length = (int) strlen(message);
     token.line = scanner.line;
+    return token;
 }
 
 static char advance() {
@@ -120,6 +121,7 @@ static TokenType checkKeyword(int start, int length,
         memcmp(scanner.start + start, rest, length) == 0) {
         return type;
     }
+    return TOKEN_IDENTIFIER;
 
 }
 

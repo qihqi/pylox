@@ -27,6 +27,8 @@ typedef enum {
   TOKEN_EOF
 } TokenType;
 
+extern const char* TOKEN_NAMES[];
+
 typedef struct {
     TokenType type;
     const char* start;

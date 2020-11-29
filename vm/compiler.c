@@ -129,7 +129,7 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
     emitByte(byte2);
 }
 
-static int emitLoop(int loopStart) {
+static void emitLoop(int loopStart) {
     emitByte(OP_LOOP);
     int offset = currentChunk()->count - loopStart + 2;
     if (offset > UINT16_MAX) errorAtCurrent("loop body too large");
@@ -413,11 +413,11 @@ static void namedVariable(Token name, bool canAssign) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
     } else {
+        arg = identifierConstant(&name);
         getOp = OP_GET_GLOBAL;
         setOp = OP_SET_GLOBAL;
     }
 
-    arg = identifierConstant(&name);
     if (canAssign && match(TOKEN_EQUAL)) {
         expression();
         emitBytes(setOp, (uint8_t) arg);

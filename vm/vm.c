@@ -46,7 +46,7 @@ static void runtimeError(const char* format, ...) {
     size_t instruction = frame->ip - frame->function ->chunk.code - 1;
     int line = frame->function->chunk.lines[instruction];
 
-    fprintf(stderr, "[line %d] in script \n");
+    fprintf(stderr, "[line %d] in script \n", line);
 
     resetStack();
 }
@@ -122,6 +122,7 @@ static bool callValue(Value callee, int argCount) {
         }
     }
     runtimeError("Can only call functions and classes.");
+    return false;
 }
 
 static bool isFalsey(Value value) {
@@ -184,6 +185,7 @@ static InterpretResult run() {
                 }
                 vm.stackTop = frame->slots;
                 push(result);
+                frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
             case OP_JUMP_IF_FALSE: {

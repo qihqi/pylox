@@ -1,0 +1,13 @@
+var setter;
+var getter;
+
+fun make() {
+  var a = 0;
+  fun s(b) { a = b; }
+  fun g() {return a; }
+  setter = s;
+  getter = g;
+  }
+make();
+setter(10);
+print getter();

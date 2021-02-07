@@ -226,8 +226,10 @@ Token scanToken() {
         case '"':
             return string();
     }
-
-    return errorToken("Unexpected character");
+                           //01234567890123456789012
+    static char message[] = "Unexpected character: .";
+    message[21] = c;
+    return errorToken(message);
 }
 
 const char* TOKEN_NAMES[] = {

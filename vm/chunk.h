@@ -34,6 +34,9 @@ typedef enum {
     OP_CLOSE_UPVALUE,
     OP_RETURN,
     OP_CLOSURE,
+    OP_CLASS,
+    OP_SET_PROPERTY,
+    OP_GET_PROPERTY,
 } OpCode;
 
 typedef struct {

@@ -102,7 +102,7 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         case OP_CLOSURE: {
             offset++;
             uint8_t constant = chunk->code[offset++];
-            printf("%-16 %4d ", "OP_CLOSURE", constant);
+            printf("%-16s %4d ", "OP_CLOSURE", constant);
             printValue(chunk->constants.values[constant]);
             printf("\n");
             ObjFunction* function = AS_FUNCTION(chunk->constants.values[constant]);
@@ -126,6 +126,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return constantInstruction("OP_GET_PROPERTY", chunk, offset);
         case OP_SET_PROPERTY:
             return constantInstruction("OP_SET_PROPERTY", chunk, offset);
+        case OP_METHOD:
+            return constantInstruction("OP_METHOD", chunk, offset);
         default:
             printf("Unknown opcode %d\n ", instruction);
             return offset + 1;

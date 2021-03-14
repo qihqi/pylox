@@ -159,6 +159,15 @@ static bool callValue(Value callee, int argCount) {
     return false;
 }
 
+static invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
+    Value method;
+    if (!tableGet(&klass->methods, name, &method)) {
+        runtimeError("Undefined propery '%s'.", name->chars);
+        return false;
+    }
+    return call(AS_CLOSURE(method), argCount);
+}
+
 static bool bindMethod(ObjClass* klass, ObjString* name) {
     Value method;
     if (!tableGet(&klass->methods, name, &method)) {
@@ -227,6 +236,21 @@ static void defineMethod(ObjString* name) {
     tableSet(&klass->methods, name, method);
     Value v;
     pop();
+}
+
+static bool invoke(ObjString* name, int argCount) {
+    Value receiver = peek(argCount);
+    if (IS_INSTANCE(receiver)) {
+        runtimeError("Only instances have methods.");
+        return false;
+    }
+
+    ObjInstance* instance = AS_INSTANCE(receiver);
+    if (tableGet(&instance->fields, name, &value)) {
+        vm.stackTop[-argCount-1] = value;
+        return callValue(value, argCount);
+    }
+    return invokeFromClass(instance->klass, name, argCount);
 }
 
 static InterpretResult run() {
@@ -478,6 +502,15 @@ static InterpretResult run() {
             }
             case OP_METHOD: {
                 defineMethod(READ_STRING());
+                break;
+            }
+            case OP_INVOKE: {
+                ObjString* method = READ_STRING();
+                int argCount = READ_BYTE();
+                if (!invoke(method, argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
         }

@@ -38,6 +38,9 @@ typedef enum {
     OP_CLASS,
     OP_SET_PROPERTY,
     OP_GET_PROPERTY,
+    OP_INHERIT,
+    OP_GET_SUPER,
+    OP_SUPER_INVOKE,
     OP_METHOD
 } OpCode;
 

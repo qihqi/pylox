@@ -43,12 +43,6 @@ static void runtimeError(const char* format, ...) {
 
     }
 
-    CallFrame* frame = &vm.frames[vm.frameCount - 1];
-    size_t instruction = frame->ip - frame->closure->function ->chunk.code - 1;
-    int line = frame->closure->function->chunk.lines[instruction];
-
-    fprintf(stderr, "[line %d] in script \n", line);
-
     resetStack();
 }
 
@@ -263,8 +257,7 @@ static InterpretResult run() {
 #define BINARY_OP(valueType, op) \
     do { \
         if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
-            runtimeError("Operands must be numbers. Got %d and %d\n", \
-                         peek(0).type, peek(1).type); \
+            runtimeError("Operands must be numbers."); \
             return INTERPRET_RUNTIME_ERROR; \
         } \
         double b = AS_NUMBER(pop()); \
